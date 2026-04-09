@@ -54,3 +54,17 @@ body {
 .ql-container.ql-snow {
   border-radius: 0 0 8px 8px !important;
 }
+
+/* 标注高亮样式 */
+mark {
+  background-color: #fef08a;
+  border-bottom: 2px solid #eab308;
+  padding: 0 2px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+mark:hover {
+  background-color: #fde047;
+}

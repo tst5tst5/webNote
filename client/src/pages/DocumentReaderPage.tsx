@@ -9,6 +9,15 @@ import {
   MessageSquare, ChevronRight, ChevronLeft, Highlighter, AlignLeft
 } from 'lucide-react';
 
+// 高亮样式
+const highlightStyle = {
+  backgroundColor: '#fef08a',
+  borderBottom: '2px solid #eab308',
+  padding: '0 2px',
+  borderRadius: '2px',
+  cursor: 'pointer',
+};
+
 export default function DocumentReaderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -17,6 +26,7 @@ export default function DocumentReaderPage() {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
 
   // 标注浮动框状态
   const [showPopup, setShowPopup] = useState(false);
@@ -26,9 +36,93 @@ export default function DocumentReaderPage() {
   const [endOffset, setEndOffset] = useState(0);
   const quillRef = useRef<Quill | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // 标注列表折叠状态
   const [isAnnotationListCollapsed, setIsAnnotationListCollapsed] = useState(false);
+
+  // 渲染带高亮的文档内容
+  const renderContentWithHighlights = useCallback(() => {
+    if (!document) return null;
+    
+    const content = document.content;
+    if (!content) return null;
+    
+    // 按 offset 排序标注
+    const sortedAnnotations = [...annotations].sort((a, b) => a.startOffset - b.startOffset);
+    
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    
+    sortedAnnotations.forEach((annotation, idx) => {
+      const { startOffset: start, endOffset: end, selectedText: text, id } = annotation;
+      
+      // 添加高亮前的文本
+      if (start > lastIndex) {
+        elements.push(
+          <span key={`text-${idx}`}>{content.substring(lastIndex, start)}</span>
+        );
+      }
+      
+      // 添加高亮文本
+      elements.push(
+        <mark 
+          key={`highlight-${id}`} 
+          style={highlightStyle}
+          onClick={() => handleHighlightClick(annotation)}
+          title="点击查看/编辑标注"
+        >
+          {text}
+        </mark>
+      );
+      
+      lastIndex = end;
+    });
+    
+    // 添加剩余文本
+    if (lastIndex < content.length) {
+      elements.push(
+        <span key="text-end">{content.substring(lastIndex)}</span>
+      );
+    }
+    
+    return elements;
+  }, [document, annotations]);
+
+  // 处理高亮点击
+  const handleHighlightClick = (annotation: Annotation) => {
+    setEditingAnnotation(annotation);
+    setSelectedText(annotation.selectedText);
+    
+    // 设置弹窗位置到窗口中间
+    setPopupPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 3
+    });
+    
+    setShowPopup(true);
+    
+    // 初始化 Quill 并填充内容
+    setTimeout(() => {
+      if (editorRef.current && !quillRef.current) {
+        quillRef.current = new Quill(editorRef.current, {
+          theme: 'snow',
+          placeholder: '写下你的笔记...',
+          modules: {
+            toolbar: [
+              ['bold', 'italic', 'underline'],
+              [{ list: 'ordered' }, { list: 'bullet' }],
+              ['clean']
+            ]
+          }
+        });
+      }
+      
+      if (quillRef.current && annotation.annotationContent) {
+        quillRef.current.root.innerHTML = annotation.annotationContent;
+      }
+    }, 100);
+  };
 
   // 加载文档和标注
   useEffect(() => {
@@ -107,6 +201,8 @@ export default function DocumentReaderPage() {
       setEndOffset(beforeSelection.length + text.length);
     }
 
+    // 清除编辑状态
+    setEditingAnnotation(null);
     setShowPopup(true);
   }, [document]);
 
@@ -117,17 +213,34 @@ export default function DocumentReaderPage() {
     const annotationContent = quillRef.current.root.innerHTML;
 
     try {
-      const result = await annotationApi.create({
-        documentId: document.id,
-        selectedText,
-        annotationContent,
-        startOffset,
-        endOffset
-      });
+      // 如果是编辑已有标注
+      if (editingAnnotation) {
+        const result = await annotationApi.update(editingAnnotation.id, {
+          annotationContent
+        });
+        
+        if (result.success) {
+          setAnnotations(annotations.map(a => 
+            a.id === editingAnnotation.id 
+              ? { ...a, annotationContent }
+              : a
+          ));
+          closePopup();
+        }
+      } else {
+        // 新建标注
+        const result = await annotationApi.create({
+          documentId: document.id,
+          selectedText,
+          annotationContent,
+          startOffset,
+          endOffset
+        });
 
-      if (result.success) {
-        setAnnotations([...annotations, result.annotation]);
-        closePopup();
+        if (result.success) {
+          setAnnotations([...annotations, result.annotation]);
+          closePopup();
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.error || '保存失败');
@@ -138,6 +251,7 @@ export default function DocumentReaderPage() {
   const closePopup = () => {
     setShowPopup(false);
     setSelectedText('');
+    setEditingAnnotation(null);
     if (quillRef.current) {
       quillRef.current.root.innerHTML = '';
     }
@@ -157,8 +271,21 @@ export default function DocumentReaderPage() {
 
   // 跳转到标注位置
   const scrollToAnnotation = (annotation: Annotation) => {
-    // 简化实现：滚动到页面顶部
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 查找对应的高亮元素并滚动到视图
+    const contentEl = contentRef.current;
+    if (contentEl) {
+      const highlights = contentEl.querySelectorAll('mark');
+      highlights.forEach((el) => {
+        if (el.textContent === annotation.selectedText) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // 添加短暂的高亮闪烁效果
+          (el as HTMLElement).style.backgroundColor = '#fde047';
+          setTimeout(() => {
+            (el as HTMLElement).style.backgroundColor = '#fef08a';
+          }, 500);
+        }
+      });
+    }
   };
 
   // 格式化时间
@@ -229,10 +356,13 @@ export default function DocumentReaderPage() {
           {/* 分割线 */}
           <div className="w-20 h-1 bg-gradient-to-r from-primary-500 to-primary-300 rounded-full mb-8"></div>
 
-          {/* 文档内容 */}
+          {/* 文档内容 - 带高亮 */}
           <div className="prose prose-lg max-w-none">
-            <div className="whitespace-pre-wrap text-text-primary leading-relaxed text-lg select-text">
-              {document.content}
+            <div 
+              ref={contentRef}
+              className="whitespace-pre-wrap text-text-primary leading-relaxed text-lg select-text"
+            >
+              {annotations.length > 0 ? renderContentWithHighlights() : document.content}
             </div>
           </div>
         </div>
@@ -343,7 +473,9 @@ export default function DocumentReaderPage() {
             <div className="px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-400 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Highlighter className="w-4 h-4" />
-                <span className="font-medium">添加标注</span>
+                <span className="font-medium">
+                  {editingAnnotation ? '编辑标注' : '添加标注'}
+                </span>
               </div>
               <button
                 onClick={closePopup}
