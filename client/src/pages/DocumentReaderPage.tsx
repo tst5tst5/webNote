@@ -38,6 +38,12 @@ export default function DocumentReaderPage() {
   const editorRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // 预览浮动框状态
+  const [previewAnnotation, setPreviewAnnotation] = useState<Annotation | null>(null);
+  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+  const [showPreview, setShowPreview] = useState(false);
+  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // 标注列表折叠状态
   const [isAnnotationListCollapsed, setIsAnnotationListCollapsed] = useState(false);
 
@@ -70,6 +76,8 @@ export default function DocumentReaderPage() {
           key={`highlight-${id}`} 
           style={highlightStyle}
           onClick={() => handleHighlightClick(annotation)}
+          onMouseEnter={(e) => handleHighlightHover(annotation, e)}
+          onMouseLeave={handleHighlightLeave}
           title="点击查看/编辑标注"
         >
           {text}
@@ -89,8 +97,39 @@ export default function DocumentReaderPage() {
     return elements;
   }, [document, annotations]);
 
-  // 处理高亮点击
+  // 处理高亮悬停 - 显示预览
+  const handleHighlightHover = (annotation: Annotation, e: React.MouseEvent) => {
+    // 清除之前的定时器
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+
+    // 延迟显示预览，避免快速划过时闪烁
+    previewTimeoutRef.current = setTimeout(() => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setPreviewAnnotation(annotation);
+      setPreviewPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.bottom + 8
+      });
+      setShowPreview(true);
+    }, 150);
+  };
+
+  // 处理高亮离开 - 隐藏预览
+  const handleHighlightLeave = () => {
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+    setShowPreview(false);
+    setPreviewAnnotation(null);
+  };
+
+  // 处理高亮点击 - 打开编辑框
   const handleHighlightClick = (annotation: Annotation) => {
+    // 隐藏预览
+    setShowPreview(false);
+    
     setEditingAnnotation(annotation);
     setSelectedText(annotation.selectedText);
     
@@ -452,7 +491,47 @@ export default function DocumentReaderPage() {
         )}
       </div>
 
-      {/* 标注浮动框 */}
+      {/* 标注预览浮动框 - 悬停时显示 */}
+      {showPreview && previewAnnotation && (
+        <div
+          className="fixed z-50 bg-gray-900 text-white rounded-lg shadow-xl px-4 py-3 max-w-sm animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            left: Math.min(Math.max(previewPosition.x - 100, 16), window.innerWidth - 216),
+            top: previewPosition.y,
+          }}
+          onMouseEnter={() => {
+            if (previewTimeoutRef.current) {
+              clearTimeout(previewTimeoutRef.current);
+            }
+          }}
+          onMouseLeave={handleHighlightLeave}
+        >
+          {/* 摘录文本 */}
+          <div className="mb-2">
+            <p className="text-xs text-gray-400 mb-1">摘录</p>
+            <p className="text-sm italic text-yellow-300">"{previewAnnotation.selectedText}"</p>
+          </div>
+          
+          {/* 笔记内容 */}
+          {previewAnnotation.annotationContent && previewAnnotation.annotationContent !== '<p><br></p>' && (
+            <div className="border-t border-gray-700 pt-2 mt-2">
+              <p className="text-xs text-gray-400 mb-1">笔记</p>
+              <div 
+                className="text-sm text-gray-200 prose prose-sm max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0"
+                dangerouslySetInnerHTML={{ __html: previewAnnotation.annotationContent }}
+              />
+            </div>
+          )}
+
+          {/* 点击提示 */}
+          <div className="border-t border-gray-700 pt-2 mt-2 flex items-center gap-1 text-xs text-gray-500">
+            <Edit3 className="w-3 h-3" />
+            <span>点击编辑</span>
+          </div>
+        </div>
+      )}
+
+      {/* 标注编辑浮动框 - 点击时显示 */}
       {showPopup && (
         <>
           {/* 背景遮罩（点击关闭） */}
