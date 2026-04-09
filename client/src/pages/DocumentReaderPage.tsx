@@ -42,7 +42,7 @@ export default function DocumentReaderPage() {
   const [previewAnnotation, setPreviewAnnotation] = useState<Annotation | null>(null);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
   const [showPreview, setShowPreview] = useState(false);
-  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 标注列表折叠状态
   const [isAnnotationListCollapsed, setIsAnnotationListCollapsed] = useState(false);
