@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Noto Sans SC', 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Quill 编辑器样式 */
+.ql-container {
+  font-family: 'Noto Sans SC', 'Inter', system-ui, sans-serif !important;
+  font-size: 14px !important;
+}
+
+.ql-editor {
+  min-height: 100px;
+  padding: 12px !important;
+}
+
+.ql-toolbar {
+  border-radius: 8px 8px 0 0 !important;
+}
+
+.ql-container.ql-snow {
+  border-radius: 0 0 8px 8px !important;
+}
